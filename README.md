@@ -1,2 +1,2 @@
 # robot-vision-thingy-for-roblox
-yes
+make sure to execute this inside developer console inside client tab or using an executor
