@@ -2,198 +2,140 @@ local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
+local TweenService = game:GetService("TweenService")
 
--- 1. Main HUD Container
+-- 1. HUD Container (Ensures it stays on top)
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "RobotVisionV10"
+ScreenGui.Name = "RobotVision_Elite_V3"
 ScreenGui.IgnoreGuiInset = true 
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 ScreenGui.Parent = game:GetService("CoreGui")
 
--- 2. Screen Tint
+-- 2. Boot Overlay (Forced to the front)
+local Overlay = Instance.new("Frame")
+Overlay.Size = UDim2.new(1, 0, 1, 0)
+Overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Overlay.ZIndex = 9999 -- Maximum Priority
+Overlay.Parent = ScreenGui
+
+local MainText = Instance.new("TextLabel")
+MainText.Size = UDim2.new(0, 500, 0, 100)
+MainText.Position = UDim2.new(0.5, -250, 0.5, -50)
+MainText.BackgroundTransparency = 1
+MainText.TextColor3 = Color3.fromRGB(0, 255, 0)
+MainText.Font = Enum.Font.Code
+MainText.TextSize = 24
+MainText.Text = "> INITIALISING..."
+MainText.ZIndex = 10000
+MainText.Parent = Overlay
+
+-- 3. Screen Tint & Global Scan Line
 local Tint = Instance.new("Frame")
 Tint.Size = UDim2.new(1, 0, 1, 0)
 Tint.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-Tint.BackgroundTransparency = 0.94
+Tint.BackgroundTransparency = 1 
 Tint.ZIndex = -1
 Tint.Parent = ScreenGui
 
--- 3. Fixed Radar UI
-local RadarFrame = Instance.new("Frame")
-RadarFrame.Size = UDim2.new(0, 150, 0, 150)
-RadarFrame.Position = UDim2.new(1, -170, 0, 20)
-RadarFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-RadarFrame.BorderSizePixel = 2
-RadarFrame.BorderColor3 = Color3.fromRGB(0, 255, 0)
-RadarFrame.Parent = ScreenGui
+local MainScanLine = Instance.new("Frame")
+MainScanLine.Size = UDim2.new(1, 0, 0, 2)
+MainScanLine.Position = UDim2.new(0, 0, -0.1, 0)
+MainScanLine.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+MainScanLine.BackgroundTransparency = 0.5
+MainScanLine.BorderSizePixel = 0
+MainScanLine.Parent = Tint
 
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(1, 0)
-UICorner.Parent = RadarFrame
+-- 4. Status Indicator
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(0, 250, 0, 30)
+StatusLabel.Position = UDim2.new(0, 20, 0, 20)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+StatusLabel.Font = Enum.Font.Code
+StatusLabel.TextSize = 18
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.Parent = ScreenGui
 
--- Crosshair/Center Dot (Shows where YOU are)
-local CenterX = Instance.new("Frame")
-CenterX.Size = UDim2.new(0, 10, 0, 1)
-CenterX.Position = UDim2.new(0.5, -5, 0.5, 0)
-CenterX.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-CenterX.Parent = RadarFrame
-
-local CenterY = Instance.new("Frame")
-CenterY.Size = UDim2.new(0, 1, 0, 10)
-CenterY.Position = UDim2.new(0.5, 0, 0.5, -5)
-CenterY.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-CenterY.Parent = RadarFrame
-
--- CORRECTED Scanning Line (Anchored to center)
-local SweepContainer = Instance.new("Frame")
-SweepContainer.Size = UDim2.new(0, 0, 0, 0)
-SweepContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
-SweepContainer.BackgroundTransparency = 1
-SweepContainer.Parent = RadarFrame
-
-local Sweep = Instance.new("Frame")
-Sweep.Size = UDim2.new(0, 75, 0, 2)
-Sweep.Position = UDim2.new(0, 0, 0, 0)
-Sweep.AnchorPoint = Vector2.new(0, 0.5) -- Rotates around the container's center
-Sweep.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-Sweep.BorderSizePixel = 0
-Sweep.Parent = SweepContainer
-
--- Alert Warning
-local AlertText = Instance.new("TextLabel")
-AlertText.Size = UDim2.new(0, 250, 0, 50)
-AlertText.Position = UDim2.new(0.5, -125, 0.15, 0)
-AlertText.BackgroundTransparency = 1
-AlertText.TextColor3 = Color3.fromRGB(255, 0, 0)
-AlertText.Font = Enum.Font.Code
-AlertText.TextSize = 25
-AlertText.Text = "⚠️ PROXIMITY ALERT ⚠️"
-AlertText.Visible = false
-AlertText.Parent = ScreenGui
-
--- Toggle Button
-local Toggle = Instance.new("TextButton")
-Toggle.Size = UDim2.new(0, 65, 0, 25)
-Toggle.Position = UDim2.new(1, -75, 0, 180)
-Toggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-Toggle.TextColor3 = Color3.fromRGB(0, 255, 0)
-Toggle.Text = "[RADAR]"
-Toggle.Font = Enum.Font.Code
-Toggle.TextSize = 12
-Toggle.Parent = ScreenGui
-
-Toggle.MouseButton1Click:Connect(function()
-    RadarFrame.Visible = not RadarFrame.Visible
-end)
-
--- Animation Loop
+-- BOOT SEQUENCE WITH FORCED DELAY
 task.spawn(function()
-    local angle = 0
+    task.wait(0.1) -- Forces screen to draw the black frame first
+    local steps = {
+        "> CONNECTING TO NEURAL LINK...",
+        "> SCANNING BIOMETRICS...",
+        "> CALIBRATING HUD...",
+        "> SUCCESS!"
+    }
+    for _, msg in ipairs(steps) do
+        MainText.Text = msg
+        task.wait(0.8)
+    end
+    
+    TweenService:Create(Overlay, TweenInfo.new(1), {BackgroundTransparency = 1}):Play()
+    TweenService:Create(MainText, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
+    TweenService:Create(Tint, TweenInfo.new(1), {BackgroundTransparency = 0.94}):Play()
+    
+    -- Infinite Scan Line Loop
     while true do
-        angle = (angle + 4) % 360
-        SweepContainer.Rotation = angle
-        if AlertText.Visible then
-            AlertText.TextTransparency = (math.sin(tick() * 12) + 1) / 2
-        end
-        task.wait()
+        MainScanLine.Position = UDim2.new(0, 0, -0.01, 0)
+        local scan = TweenService:Create(MainScanLine, TweenInfo.new(4, Enum.EasingStyle.Linear), {Position = UDim2.new(0, 0, 1.01, 0)})
+        scan:Play()
+        scan.Completed:Wait()
     end
 end)
 
+-- STATUS & DEATH LOGIC
+local hasDied = false
+RunService.RenderStepped:Connect(function()
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChild("Humanoid")
+    
+    if hum and hum.Health > 0 then
+        hasDied = false
+        StatusLabel.Text = "STATUS: ONLINE"
+        StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+        StatusLabel.TextTransparency = 0
+    else
+        StatusLabel.Text = "STATUS: DISCONNECTED"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+        StatusLabel.TextTransparency = math.random(0, 10) > 7 and 1 or 0
+        
+        if not hasDied then
+            hasDied = true
+            Overlay.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+            Overlay.BackgroundTransparency = 0.5
+            MainText.Text = "CRITICAL ERROR: SYSTEM FAILURE"
+            MainText.TextColor3 = Color3.fromRGB(255, 255, 255)
+            MainText.TextTransparency = 0
+            task.delay(1.5, function()
+                TweenService:Create(Overlay, TweenInfo.new(1), {BackgroundTransparency = 1}):Play()
+                TweenService:Create(MainText, TweenInfo.new(1), {TextTransparency = 1}):Play()
+            end)
+        end
+    end
+end)
+
+-- PLAYER TRACKING
 local function createHUD(player)
     if player == LocalPlayer then return end
-    
-    local folder = Instance.new("Folder")
-    folder.Name = player.Name
-    folder.Parent = ScreenGui
-
-    local highlight = Instance.new("Highlight")
-    highlight.FillColor = Color3.fromRGB(0, 255, 0)
-    highlight.FillTransparency = 0.65
-    highlight.Parent = folder
-
-    local info = Instance.new("TextLabel")
-    info.Size = UDim2.new(0, 160, 0, 50)
-    info.BackgroundTransparency = 1
-    info.TextColor3 = Color3.fromRGB(0, 255, 0)
-    info.Font = Enum.Font.Code
-    info.TextSize = 11
+    local highlight = Instance.new("Highlight", ScreenGui)
+    local info = Instance.new("TextLabel", ScreenGui)
+    info.Size, info.BackgroundTransparency, info.TextColor3, info.Font, info.TextSize = UDim2.new(0, 150, 0, 40), 1, Color3.fromRGB(0, 255, 0), Enum.Font.Code, 12
     info.Visible = false
-    info.Parent = folder
 
-    local dot = Instance.new("Frame")
-    dot.Size = UDim2.new(0, 5, 0, 5)
-    dot.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-    dot.BorderSizePixel = 0
-    dot.ZIndex = 2
-    dot.Parent = RadarFrame
-    local dotCorner = Instance.new("UICorner")
-    dotCorner.CornerRadius = UDim.new(1, 0)
-    dotCorner.Parent = dot
-
-    local connection
-    connection = RunService.RenderStepped:Connect(function()
+    RunService.RenderStepped:Connect(function()
         local char = player.Character
-        local lChar = LocalPlayer.Character
-        if not char or not char:FindFirstChild("HumanoidRootPart") or not lChar or not lChar:FindFirstChild("HumanoidRootPart") then
-            info.Visible, dot.Visible = false, false
-            highlight.Adornee = nil
-            return
-        end
-
-        local root = char.HumanoidRootPart
-        local lRoot = lChar.HumanoidRootPart
-        local hum = char:FindFirstChild("Humanoid")
-        local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
-        local distance = (root.Position - lRoot.Position).Magnitude
-
-        -- Status Logic
-        local status = "ALIVE"
-        local statusColor = Color3.fromRGB(0, 255, 0)
-        local health = hum and hum.Health or 0
-        
-        if health <= 0 then
-            status = "DEAD"
-            statusColor = Color3.fromRGB(255, 0, 0)
-        end
-
-        highlight.Adornee = char
-        highlight.FillColor = statusColor
-        
-        -- Radar Tracking (Rotates with Camera)
-        local lookVector = Camera.CFrame.LookVector
-        local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
-        local relativePos = root.Position - lRoot.Position
-        
-        local x = relativePos:Dot(Camera.CFrame.RightVector)
-        local z = -relativePos:Dot(flatLook)
-        
-        local radarX = (x / 200) * 75
-        local radarZ = (z / 200) * 75
-        
-        local distScale = math.sqrt(radarX^2 + radarZ^2)
-        if distScale > 70 then
-            radarX, radarZ = (radarX / distScale) * 70, (radarZ / distScale) * 70
-        end
-
-        dot.Position = UDim2.new(0.5, radarX - 2.5, 0.5, radarZ - 2.5)
-        dot.BackgroundColor3 = statusColor
-        dot.Visible = RadarFrame.Visible
-
-        -- Proximity Alert Logic
-        local isAnyoneClose = false
-        if health > 0 and distance < 15 then
-            isAnyoneClose = true
-        end
-        AlertText.Visible = isAnyoneClose
-
-        -- POV Info
-        if onScreen then
-            info.Position = UDim2.new(0, pos.X + 15, 0, pos.Y - 15)
-            info.Text = string.format("[%s]\nSTATUS: %s\nHP: %d\nDST: %d", player.Name:upper(), status, health, math.floor(distance))
-            info.Visible = true
-            info.TextColor3 = (distance < 15 or health <= 0) and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 255, 0)
-        else
-            info.Visible = false
-        end
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            local root = char.HumanoidRootPart
+            local hum = char:FindFirstChild("Humanoid")
+            local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
+            highlight.Adornee = char
+            highlight.FillColor = (hum and hum.Health > 0) and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+            if onScreen then
+                info.Position = UDim2.new(0, pos.X + 10, 0, pos.Y - 20)
+                info.Text = string.format("[%s]\n%s | HP: %d", player.Name:upper(), (hum.Health > 0 and "ALIVE" or "DEAD"), hum.Health)
+                info.Visible = true
+            else info.Visible = false end
+        else highlight.Adornee = nil info.Visible = false end
     end)
 end
 
